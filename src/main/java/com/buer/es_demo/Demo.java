@@ -7,14 +7,22 @@ import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.ElasticsearchTransport;
+import co.elastic.clients.transport.TransportUtils;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import co.elastic.clients.util.ObjectBuilder;
 import jakarta.json.JsonObject;
 import org.apache.http.Header;
 import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.message.BasicHeader;
 import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestClientBuilder;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,8 +30,8 @@ import java.util.function.Function;
 
 public class Demo {
 
-    String serverUrl = "https://localhost:9200";
-    String apiKey = "VnVhQ2ZHY0JDZGJrU...";
+    String serverUrl = "http://localhost:9200";
+    String apiKey = "5Tr7-tXa3F26wRfhIj";
 
     // Create the low-level client
     RestClient restClient = RestClient
@@ -40,6 +48,20 @@ public class Demo {
     // And create the API client
     ElasticsearchClient esClient = new ElasticsearchClient(transport);
 
+
+    public static void main(String[] args) throws IOException {
+        Demo demo = new Demo();
+        demo.query();
+    }
+
+    public void queryAll() throws IOException {
+        SearchResponse<Customer> response = esClient.search(s -> s
+                        .index("customer")
+                        .query(q -> q.matchAll(m -> m)),
+                Customer.class
+        );
+        System.out.println(response);
+    }
 
     public void save() throws IOException {
         Customer customer1 = new Customer();
@@ -75,19 +97,14 @@ public class Demo {
          * 查看customer索引的数据
          * */
         SearchResponse<Customer> response = esClient.search(s -> s
-                        .index("customer"),
+                        .index("customer")
+                        .query(q -> q.matchAll(m -> m)),
                 Customer.class
         );
         System.out.println(response);
 
     }
 
-    /**
-     * ES的查询是和评分有关的，评分越高，查询结果越靠前
-     * 如果查出不需要的值需要关闭评分查询
-     * query.constantScore()
-     * 这个使用方法在8.9版本我没搞懂
-     * */
     public void query() throws IOException {
 
         //查询 tagA && tagB
