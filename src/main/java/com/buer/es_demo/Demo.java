@@ -1,9 +1,14 @@
 package com.buer.es_demo;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.SortOptions;
+import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.aggregations.HistogramBucket;
 import co.elastic.clients.elasticsearch._types.query_dsl.ConstantScoreQuery;
-import co.elastic.clients.elasticsearch.core.IndexResponse;
-import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch._types.query_dsl.MatchQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch.core.*;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.ElasticsearchTransport;
@@ -85,13 +90,49 @@ public class Demo {
         customers.add(customer3);
 
         for (Customer customer : customers) {
+            /**
+             * lambaa
+             * */
             IndexResponse response = esClient.index(i -> i
                     .index("customer")
                     .id(customer.getId().toString())
                     .document(customer)
             );
             System.out.println(response);
+
+
+            IndexRequest.Builder<Customer> indexReqBuilder = new IndexRequest.Builder<>();
+            indexReqBuilder.index("customer");
+            indexReqBuilder.id(customer.getId().toString());
+            indexReqBuilder.document(customer);
+
+            IndexResponse response1 = esClient.index(indexReqBuilder.build());
         }
+
+
+
+        BulkRequest.Builder br = new BulkRequest.Builder();
+
+        for (Customer customer : customers) {
+            br.operations(op -> op
+                    .index(idx -> idx
+                            .index("customer")
+                            .id(customer.getId().toString())
+                            .document(customer)
+                    )
+            );
+        }
+
+        BulkResponse result = esClient.bulk(br.build());
+
+        if (result.errors()) {
+            for (BulkResponseItem item: result.items()) {
+                if (item.error() != null) {
+                    System.out.println(item.error().reason());
+                }
+            }
+        }
+
 
         /**
          * 查看customer索引的数据
@@ -167,5 +208,71 @@ public class Demo {
                         ),
                 Customer.class);
         System.out.println(search3);
+    }
+
+
+    public void query2() throws IOException {
+        //select * from customer where tags = tagA
+        SearchResponse<Customer> search = esClient.search(s -> s
+                        .index("customer")
+                        .query( queryFn -> queryFn
+                                .match(match -> match
+                                        .field("tags")
+                                        .query("tagA")
+                                )
+                        )
+                        .sort( f-> f.field( v -> v
+                                .field("a")
+                                .order(SortOrder.Asc)))
+                        ,
+                Customer.class);
+
+        System.out.println(search);
+
+
+
+        Query query = MatchQuery.of(m -> m
+                .field("tags")
+                .query("tagA")
+        )._toQuery();
+        SearchResponse<Void> response = esClient.search(b -> b
+                        .index("customer")
+                        .size(0)
+                        .query(query)
+                        .aggregations("price-histogram", a -> a
+                                .histogram(h -> h
+                                        .field("price")
+                                        .interval(50.0)
+                                )
+                        ),
+                Void.class
+        );
+
+
+        List<HistogramBucket> buckets = response.aggregations()
+                .get("price-histogram")
+                .histogram()
+                .buckets().array();
+
+        for (HistogramBucket bucket: buckets) {
+            bucket.docCount();
+            bucket.key();
+        }
+    }
+
+
+    public void query3() throws IOException {
+        //SELECT COUNT(*) as group_by_age FROM customer GROUP BY age;
+        SearchResponse<Customer> search = esClient.search(s -> s
+                        .index("customer")
+                        .size(0)
+                        .aggregations("group_by_age", aggFn ->
+                                aggFn.terms(termsFn ->
+                                        termsFn.field("age"))),
+                Customer.class);
+        System.out.println(search);
+
+
+
     }
 }
